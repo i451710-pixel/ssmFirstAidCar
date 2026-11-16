@@ -547,18 +547,18 @@ const WORD_TEMPLATE = {
             ]
         },
         {
-            title: '第四層穿刺用品及防護裝備',
-            items: [
-                { name: 'Gauze 7.5', section: 'level4', match: '無菌紗布 7.5', placeholder: 'level4_gauze75' },
-                { name: 'Gauze 10', section: 'level4', match: '無菌紗布 10', placeholder: 'level4_gauze10' },
-                { name: 'Betadine', section: 'level4', match: '優碘', placeholder: 'level4_betadin' },
-                { name: 'Dressing kit', section: 'level4', match: '一次性換藥包', placeholder: 'level4_dressing' },
-                { name: 'Apron', section: 'level4', match: '一次性圍裙', placeholder: 'level4_apron' },
-                { name: 'FaceShield', section: 'level4', match: '防護面罩', placeholder: 'level4_faceshield' },
-                { name: 'Gloves L', section: 'level4', match: '手套盒 L size', placeholder: 'level4_glovesL' },
-                { name: 'Gloves S', section: 'level4', match: '手套盒 S size', placeholder: 'level4_glovesS' }
-            ]
-        }
+    title: '第四層穿刺用品及防護裝備',
+    items: [
+        { name: 'Gauze 7.5',     section: 'level4', match: '無菌紗布 Sterile gauze 7.5', placeholder: 'level4_gauze75' },
+        { name: 'Gauze 10',      section: 'level4', match: '無菌紗布 Sterile gauze 10',  placeholder: 'level4_gauze10' },
+        { name: 'Betadine',      section: 'level4', match: '優碘 Betadine',              placeholder: 'level4_betadin' },
+        { name: 'Dressing kit',  section: 'level4', match: '一次性換藥包',               placeholder: 'level4_dressing' },
+        { name: 'Apron',         section: 'level4', match: '一次性圍裙',                 placeholder: 'level4_apron' },
+        { name: 'FaceShield',    section: 'level4', match: '防護面罩',                   placeholder: 'level4_faceshield' },
+        { name: 'Gloves L',      section: 'level4', match: '手套盒 L size',              placeholder: 'level4_glovesL' },
+        { name: 'Gloves S',      section: 'level4', match: '手套盒 S size',              placeholder: 'level4_glovesS' }
+    ]
+}
     ]
 };
 
@@ -908,6 +908,38 @@ function escapeHtml(s) {
                     .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 
+function findItemByMatch(items, match) {
+    if (!Array.isArray(items) || !match) return null;
+    const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+    const target = norm(match);
+    if (!target) return null;
+
+    // 0) 完全等於（去空白）→ 最高優先
+    let found = items.find(it => norm(it.name) === target);
+    if (found) return found;
+
+    // 1) 以 match 開頭，但「match 結尾是數字時，下一個字不能是小數點或數字」
+    //    避免 Fr.6 誤命中 Fr.6.5、No.7 誤命中 No.7.5
+    found = items.find(it => {
+        const n = norm(it.name);
+        if (!n.startsWith(target)) return false;
+        if (/\d$/.test(target)) {
+            const next = n.charAt(target.length);
+            if (next === '.' || /\d/.test(next)) return false;
+        }
+        return true;
+    });
+    if (found) return found;
+
+    // 2) includes
+    found = items.find(it => norm(it.name).includes(target));
+    if (found) return found;
+
+    // 3) 拆關鍵字，全部都要包含（例如「無菌紗布」＋「7.5」）
+    const parts = String(match).split(/\s+/).filter(Boolean).map(norm);
+    return items.find(it => parts.every(p => norm(it.name).includes(p))) || null;
+}
+    
 function formatTime(iso) {
     try {
         const d = new Date(iso);
@@ -2823,9 +2855,7 @@ function updateRowDisplay(cartId, section, itemId) {
 }
 
 function findItemExpiry(cart, sectionKey, matchText) {
-    const items = cart.items[sectionKey] || [];
-    const found = items.find(it => it.name.includes(matchText));
-    return found ? found : null;
+    return findItemByMatch(cart.items[sectionKey] || [], matchText);
 }
 
 /* ============================================================
@@ -2878,7 +2908,7 @@ function exportCartToDocx() {
 
     WORD_TEMPLATE.page1.concat(WORD_TEMPLATE.page2).forEach(block => {
         block.items.forEach(row => {
-            const item = findItemExpiry(cart, row.section, row.match);
+            const item = findItemByMatch(cart.items[row.section] || [], row.match);
             let value = 'N/A';
             if (item) {
                 if (item.outOfStock) value = '缺貨';
